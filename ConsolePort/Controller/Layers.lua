@@ -522,30 +522,30 @@ function Layers:Claim(frame, level, key, kind, a, b)
 	if ( kind == 'click' ) then
 		self:SetFrameRef('claimtarget', a)
 	end
-	self:Execute(CPAPI.FormatSecureBody({
+	self:Execute(CPAPI.ConvertSecureBody(CPAPI.FormatSecureBody({
 		level = level; key = key; kind = kind; b = b or false;
 		a = ( kind ~= 'click' ) and a or false;
 	}, [[
 		local owner  = self:GetFrameRef('claimowner');
 		local target = ( {kind} == 'click' ) and self:GetFrameRef('claimtarget') or {a};
 		self::Claim(owner, {level}, {key}, {kind}, target, {b} or nil)
-	]]))
+	]])))
 	return true;
 end
 
 function Layers:Release(frame, key)
 	if InCombatLockdown() then return false end;
 	self:SetFrameRef('claimowner', frame)
-	self:Execute(CPAPI.FormatSecureBody({ key = key }, [[
+	self:Execute(CPAPI.ConvertSecureBody(CPAPI.FormatSecureBody({ key = key }, [[
 		self::Release(self:GetFrameRef('claimowner'), {key})
-	]]))
+	]])))
 	return true;
 end
 
 function Layers:ReleaseAll(frame)
 	if InCombatLockdown() then return false end;
 	self:SetFrameRef('claimowner', frame)
-	self:Execute([[ self::ReleaseAll(self:GetFrameRef('claimowner')) ]])
+	self:Execute(CPAPI.ConvertSecureBody([[ self::ReleaseAll(self:GetFrameRef('claimowner')) ]]))
 	return true;
 end
 

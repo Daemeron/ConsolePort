@@ -75,7 +75,7 @@ Layers.Env = {
 	-----------------------------------------------------------
 	ClearRow = [[
 		for i = #APPLIED, 1, -1 do
-			self::Release(self, APPLIED[i])
+			self::Release(ROWOWNER, APPLIED[i])
 			APPLIED[i] = nil;
 		end
 	]];
@@ -111,11 +111,13 @@ Layers.Env = {
 		LIVE[key] = true;
 	]];
 	-----------------------------------------------------------
-	-- @param owner : frame handle the binding dispatches to
+	-- Frame handles do not survive RunAttribute, so owners and targets
+	-- are names.
+	-- @param owner : name of the claimant
 	-- @param level : LEVEL_BASE .. LEVEL_MODAL
 	-- @param key   : full key, chord and button
 	-- @param kind  : 'click' or 'binding'
-	-- @param a     : click target handle, or binding action
+	-- @param a     : click target frame name, or binding action
 	-- @param b     : mouse button for a click
 	Claim = [[
 		local owner, level, key, kind, a, b = ...;
@@ -177,9 +179,9 @@ Layers.Env = {
 				for i = 1, emulated and 2 or 1 do
 					local key = chord..( ( i == 1 ) and button or emulated );
 					if ( entry[1] == 'click' ) then
-						self::Claim(self, LEVEL_BASE, key, 'click', entry[2], entry[3])
+						self::Claim(ROWOWNER, LEVEL_BASE, key, 'click', entry[2], entry[3])
 					else
-						self::Claim(self, LEVEL_BASE, key, 'binding', entry[2])
+						self::Claim(ROWOWNER, LEVEL_BASE, key, 'binding', entry[2])
 					end
 					APPLIED[#APPLIED + 1] = key;
 				end
@@ -359,6 +361,7 @@ function Layers:OnEnvironmentChanged()
 		CLAIMS   = CLAIMS   or newtable();
 		LIVE     = LIVE     or newtable();
 		LEVEL_BASE, LEVEL_OVERRIDE, LEVEL_NAV, LEVEL_MODAL = 1, 2, 3, 4;
+		ROWOWNER = 'row';
 		ROW      = ROW      or newtable();
 	]])
 	self:CreateEnvironment()
@@ -510,42 +513,38 @@ end
 -- numbers and writes one engine binding per key.
 Layers.Level = { BASE = 1; OVERRIDE = 2; NAV = 3; MODAL = 4 };
 
--- @param frame : dispatch target, a protected frame
+local function ClaimName(frame)
+	local name = type(frame) == 'string' and frame or frame:GetName();
+	assert(name, 'A claimant needs a name.')
+	return name;
+end
+
+-- @param frame : claimant, a named frame or its name
 -- @param level : Layers.Level
 -- @param key   : full key, chord and button
 -- @param kind  : 'click' or 'binding'
--- @param a     : click target frame, or binding action
+-- @param a     : click target, a named frame or its name, or a binding action
 -- @param b     : mouse button for a click
 function Layers:Claim(frame, level, key, kind, a, b)
 	if InCombatLockdown() then return false end;
-	self:SetFrameRef('claimowner', frame)
-	if ( kind == 'click' ) then
-		self:SetFrameRef('claimtarget', a)
-	end
 	self:Execute(CPAPI.ConvertSecureBody(CPAPI.FormatSecureBody({
-		level = level; key = key; kind = kind; b = b or false;
-		a = ( kind ~= 'click' ) and a or false;
-	}, [[
-		local owner  = self:GetFrameRef('claimowner');
-		local target = ( {kind} == 'click' ) and self:GetFrameRef('claimtarget') or {a};
-		self::Claim(owner, {level}, {key}, {kind}, target, {b} or nil)
-	]])))
+		owner = ClaimName(frame); level = level; key = key; kind = kind;
+		a = ( kind == 'click' ) and ClaimName(a) or a; b = b or false;
+	}, [[ self::Claim({owner}, {level}, {key}, {kind}, {a}, {b} or nil) ]])))
 	return true;
 end
 
 function Layers:Release(frame, key)
 	if InCombatLockdown() then return false end;
-	self:SetFrameRef('claimowner', frame)
-	self:Execute(CPAPI.ConvertSecureBody(CPAPI.FormatSecureBody({ key = key }, [[
-		self::Release(self:GetFrameRef('claimowner'), {key})
-	]])))
+	self:Execute(CPAPI.ConvertSecureBody(CPAPI.FormatSecureBody({ owner = ClaimName(frame); key = key },
+		[[ self::Release({owner}, {key}) ]])))
 	return true;
 end
 
 function Layers:ReleaseAll(frame)
 	if InCombatLockdown() then return false end;
-	self:SetFrameRef('claimowner', frame)
-	self:Execute(CPAPI.ConvertSecureBody([[ self::ReleaseAll(self:GetFrameRef('claimowner')) ]]))
+	self:Execute(CPAPI.ConvertSecureBody(CPAPI.FormatSecureBody({ owner = ClaimName(frame) },
+		[[ self::ReleaseAll({owner}) ]])))
 	return true;
 end
 
